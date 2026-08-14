@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rpi-weather-display"
-version = "1.0.0"
+version = "1.1.0"
 description = "Always-on Raspberry Pi weather dashboard"
 requires-python = ">=3.11"
 license = {text = "GPL-3.0-only"}

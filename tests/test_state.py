@@ -35,3 +35,28 @@ def test_atomic_write_leaves_valid_original_on_replace_failure(tmp_path, monkeyp
 def test_cache_tolerates_corruption(tmp_path):
     store = StateStore(tmp_path); store.cache_path.write_text("nope")
     assert store.load_cache() is None
+
+def test_old_settings_file_gets_new_defaults(tmp_path):
+    store = StateStore(tmp_path)
+    store.settings_path.write_text(json.dumps({
+        "location_label": "Mission", "latitude": 37.76, "longitude": -122.42,
+        "timezone": "America/Los_Angeles", "units": "metric", "clock_format": "24h",
+    }))
+    settings = store.load_settings()
+    assert settings.weather_scene_seconds == 20
+    assert settings.events_scene_seconds == 10
+    assert settings.event_categories == ("Top Pick", "Art & Museums", "Fairs & Festivals", "Eating & Drinking")
+
+@pytest.mark.parametrize("field,value", [
+    ("weather_scene_seconds", 4), ("weather_scene_seconds", 301),
+    ("events_scene_seconds", 4), ("events_scene_seconds", 301),
+])
+def test_duration_validation(field, value):
+    with pytest.raises(ValueError, match="between 5 and 300"):
+        Settings.from_dict(Settings().__dict__ | {field: value})
+
+def test_event_categories_are_exact_and_oriented_as_a_list():
+    value = Settings.from_dict(Settings().__dict__ | {"event_categories": ["Comedy", "Live Music"]})
+    assert value.event_categories == ("Comedy", "Live Music")
+    with pytest.raises(ValueError, match="unknown event category"):
+        Settings.from_dict(Settings().__dict__ | {"event_categories": ["music"]})

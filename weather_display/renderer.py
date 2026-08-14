@@ -3,10 +3,12 @@ from __future__ import annotations
 import math
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pygame
 
 from .state import Settings
+from .events import Event, EventSelection
 from .util import age_label, compass_direction, condition_for, format_clock, local_datetime, rounded, uv_risk
 from .weather import WeatherSnapshot
 
@@ -73,6 +75,73 @@ class DashboardRenderer:
             status = "No cached data · retrying"
         self._text("Weather data by Open-Meteo.com", 13, MUTED, (8, 305))
         self._text(status, 13, (231, 150, 75) if stale or error else MUTED, (472, 305), anchor="topright")
+
+    def render_events(self, settings: Settings, selection: EventSelection,
+                      now: datetime | None = None, fetched_at: str | None = None,
+                      error: str | None = None) -> None:
+        now = now or datetime.now(timezone.utc)
+        self.theme = THEMES["night"]
+        self.surface.fill(self.theme["bg"])
+        local = local_datetime(now, settings.timezone)
+        self._text("SF EVENTS", 28, TEXT, (10, 5))
+        self._text(local.strftime("%a, %b %-d"), 18, MUTED, (470, 9), anchor="topright")
+        self._event_column("TODAY", selection.today, 8, 39, weekend=False)
+        self._event_column("THIS WEEKEND", selection.weekend, 245, 39, weekend=True)
+
+        fetched = _parse_time(fetched_at) if fetched_at else None
+        age = (now - fetched).total_seconds() if fetched else None
+        stale = age is not None and age > 2 * 60 * 60
+        if fetched:
+            status = f"Updated {age_label(age or 0)}"
+            if stale or error:
+                status = "STALE · " + status
+        else:
+            status = "Events unavailable · retrying"
+        self._text("Events by Funcheap", 13, MUTED, (8, 305))
+        self._text(status, 13, (231, 150, 75) if stale or error or not fetched else MUTED,
+                   (472, 305), anchor="topright")
+
+    def _event_column(self, heading: str, events: tuple[Event, ...], x: int, y: int,
+                      weekend: bool) -> None:
+        width = 227
+        self._text(heading, 18, self.theme["accent"], (x + 3, y))
+        for index in range(3):
+            top = y + 25 + index * 77
+            pygame.draw.rect(self.surface, self.theme["card"], (x, top, width, 70), border_radius=8)
+            if index >= len(events):
+                label = "No more events" if events else "Events unavailable"
+                self._text(label, 16, MUTED, (x + 9, top + 23))
+                continue
+            event = events[index]
+            lines = self._wrap_text(event.title, 18, width - 18, 2)
+            for line_index, line in enumerate(lines):
+                self._text(line, 18, TEXT, (x + 9, top + 7 + line_index * 18))
+            detail = _event_detail(event, weekend)
+            self._text(self._fit_text(detail, 16, width - 18), 16, MUTED, (x + 9, top + 51))
+
+    def _fit_text(self, value: str, size: int, max_width: int) -> str:
+        if self.fonts[size].size(value)[0] <= max_width:
+            return value
+        result = value
+        while result and self.fonts[size].size(result + "…")[0] > max_width:
+            result = result[:-1]
+        return result.rstrip() + "…"
+
+    def _wrap_text(self, value: str, size: int, max_width: int, max_lines: int) -> list[str]:
+        words, lines, current = value.split(), [], ""
+        for index, word in enumerate(words):
+            candidate = f"{current} {word}".strip()
+            if current and self.fonts[size].size(candidate)[0] > max_width:
+                lines.append(self._fit_text(current, size, max_width))
+                current = word
+                if len(lines) == max_lines - 1:
+                    current = " ".join([current, *words[index + 1:]])
+                    break
+            else:
+                current = candidate
+        if current and len(lines) < max_lines:
+            lines.append(self._fit_text(current, size, max_width))
+        return lines or [""]
 
     def _draw_cards(self, weather: WeatherSnapshot | None) -> None:
         cards = ((6, 186, 152, 110), (164, 186, 152, 110), (322, 186, 152, 110))
@@ -164,11 +233,33 @@ def _parse_time(value: str) -> datetime:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
+def _event_detail(event: Event, include_day: bool) -> str:
+    start = _parse_time(event.start).astimezone(ZoneInfo("America/Los_Angeles"))
+    if event.all_day:
+        time_label = "All day"
+    else:
+        time_label = start.strftime("%-I:%M %p")
+    if include_day:
+        time_label = f"{start.strftime('%a')} {time_label}"
+    return f"{time_label} · {event.venue}"
+
+
 def save_preview(path: str | Path, settings: Settings, weather: WeatherSnapshot | None,
                  now: datetime, error: str | None = None) -> None:
     pygame.init()
     surface = pygame.Surface((WIDTH, HEIGHT))
     DashboardRenderer(surface).render(settings, weather, now, error)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    pygame.image.save(surface, str(path))
+    pygame.quit()
+
+
+def save_event_preview(path: str | Path, settings: Settings, selection: EventSelection,
+                       now: datetime, fetched_at: str | None = None,
+                       error: str | None = None) -> None:
+    pygame.init()
+    surface = pygame.Surface((WIDTH, HEIGHT))
+    DashboardRenderer(surface).render_events(settings, selection, now, fetched_at, error)
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     pygame.image.save(surface, str(path))
     pygame.quit()

@@ -12,7 +12,8 @@ from urllib.parse import urlsplit
 
 from flask import Flask, abort, jsonify, redirect, render_template, request, session, url_for
 
-from .state import Settings, StateStore
+from .state import EVENT_CATEGORIES, Settings, StateStore
+from .events import EventService
 from .weather import OpenMeteoProvider, WeatherError, WeatherService
 
 
@@ -38,7 +39,9 @@ class LoginThrottle:
 
 def create_app(store: StateStore, weather: WeatherService, provider: OpenMeteoProvider,
                pin: str, refresh_event: threading.Event | None = None,
-               display_status=lambda: "starting") -> Flask:
+               display_status=lambda: "starting",
+               cycle_reset_event: threading.Event | None = None,
+               events: EventService | None = None) -> Flask:
     if not pin:
         raise RuntimeError("WEATHER_DISPLAY_PIN is required")
     app = Flask(__name__)
@@ -47,6 +50,7 @@ def create_app(store: StateStore, weather: WeatherService, provider: OpenMeteoPr
                       SESSION_COOKIE_SECURE=False, PERMANENT_SESSION_LIFETIME=86400)
     throttle = LoginThrottle()
     refresh_event = refresh_event or threading.Event()
+    cycle_reset_event = cycle_reset_event or threading.Event()
 
     def authenticated(fn):
         @wraps(fn)
@@ -90,7 +94,8 @@ def create_app(store: StateStore, weather: WeatherService, provider: OpenMeteoPr
     @app.get("/settings")
     @authenticated
     def settings_page():
-        return render_template("settings.html", settings=store.load_settings(), csrf=session["csrf"])
+        return render_template("settings.html", settings=store.load_settings(), csrf=session["csrf"],
+                               event_categories=EVENT_CATEGORIES)
 
     @app.get("/api/settings")
     @authenticated
@@ -106,6 +111,7 @@ def create_app(store: StateStore, weather: WeatherService, provider: OpenMeteoPr
         except (ValueError, TypeError) as exc:
             return jsonify(error=str(exc)), 400
         refresh_event.set()
+        cycle_reset_event.set()
         return jsonify(asdict(candidate))
 
     @app.get("/api/locations")
@@ -124,6 +130,9 @@ def create_app(store: StateStore, weather: WeatherService, provider: OpenMeteoPr
             fetched = datetime.fromisoformat(snapshot.fetched_at.replace("Z", "+00:00"))
             age = max(0, int((datetime.now(timezone.utc) - fetched).total_seconds()))
         return jsonify(service="ok", weather_cache_age_seconds=age,
-                       weather_error=weather.last_error, display=display_status())
+                       weather_error=weather.last_error,
+                       event_cache_age_seconds=events.cache_age_seconds() if events else None,
+                       event_error=events.last_error if events else None,
+                       display=display_status())
 
     return app

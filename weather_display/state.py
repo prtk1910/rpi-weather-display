@@ -10,6 +10,25 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
+EVENT_CATEGORIES = (
+    "Top Pick", "Art & Museums", "Charity & Volunteering", "Club / DJ",
+    "Comedy", "Eating & Drinking", "Fairs & Festivals", "Free Stuff",
+    "Fun & Games", "Geek Event", "Kids & Families", "Lectures & Workshops",
+    "Literature", "Live Music", "Movies", "Shopping & Fashion",
+    "Sports & Fitness", "Theater & Performance",
+)
+DEFAULT_EVENT_CATEGORIES = ("Top Pick", "Art & Museums", "Fairs & Festivals", "Eating & Drinking")
+
+
+def _duration(value: object) -> int:
+    if isinstance(value, bool):
+        raise ValueError("display times must be whole numbers")
+    result = int(value)
+    if float(value) != result:
+        raise ValueError("display times must be whole numbers")
+    return result
+
+
 @dataclass(frozen=True)
 class Settings:
     location_label: str = "Rincon Hill"
@@ -18,6 +37,9 @@ class Settings:
     timezone: str = "America/Los_Angeles"
     units: str = "metric"
     clock_format: str = "24h"
+    weather_scene_seconds: int = 20
+    events_scene_seconds: int = 10
+    event_categories: tuple[str, ...] = DEFAULT_EVENT_CATEGORIES
 
     @classmethod
     def from_dict(cls, value: dict) -> "Settings":
@@ -28,6 +50,9 @@ class Settings:
         if unknown:
             raise ValueError(f"unknown setting: {sorted(unknown)[0]}")
         try:
+            categories = value.get("event_categories", cls.event_categories)
+            if not isinstance(categories, (list, tuple)) or isinstance(categories, (str, bytes)):
+                raise ValueError("event_categories must be a list")
             result = cls(
                 location_label=str(value.get("location_label", cls.location_label)).strip(),
                 latitude=float(value.get("latitude", cls.latitude)),
@@ -35,9 +60,12 @@ class Settings:
                 timezone=str(value.get("timezone", cls.timezone)).strip(),
                 units=str(value.get("units", cls.units)),
                 clock_format=str(value.get("clock_format", cls.clock_format)),
+                weather_scene_seconds=_duration(value.get("weather_scene_seconds", cls.weather_scene_seconds)),
+                events_scene_seconds=_duration(value.get("events_scene_seconds", cls.events_scene_seconds)),
+                event_categories=tuple(str(item) for item in categories),
             )
         except (TypeError, ValueError) as exc:
-            raise ValueError("latitude and longitude must be numbers") from exc
+            raise ValueError(str(exc) or "settings contain invalid values") from exc
         result.validate()
         return result
 
@@ -50,6 +78,13 @@ class Settings:
             raise ValueError("units must be metric or imperial")
         if self.clock_format not in ("12h", "24h"):
             raise ValueError("clock_format must be 12h or 24h")
+        if not 5 <= self.weather_scene_seconds <= 300 or not 5 <= self.events_scene_seconds <= 300:
+            raise ValueError("display times must be between 5 and 300 seconds")
+        if len(set(self.event_categories)) != len(self.event_categories):
+            raise ValueError("event_categories must not contain duplicates")
+        invalid = [item for item in self.event_categories if item not in EVENT_CATEGORIES]
+        if invalid:
+            raise ValueError(f"unknown event category: {invalid[0]}")
         try:
             ZoneInfo(self.timezone)
         except ZoneInfoNotFoundError as exc:
@@ -77,6 +112,7 @@ class StateStore:
         self.directory = Path(directory)
         self.settings_path = self.directory / "settings.json"
         self.cache_path = self.directory / "weather-cache.json"
+        self.event_cache_dir = self.directory / "event-cache"
         self.secret_path = self.directory / "session-secret"
         self._lock = threading.RLock()
 
@@ -102,6 +138,19 @@ class StateStore:
     def save_cache(self, value: dict) -> None:
         with self._lock:
             atomic_write_json(self.cache_path, value)
+
+    def load_event_cache(self, date_key: str) -> dict | None:
+        path = self.event_cache_dir / f"{date_key}.json"
+        with self._lock:
+            try:
+                value = json.loads(path.read_text(encoding="utf-8"))
+                return value if isinstance(value, dict) else None
+            except (FileNotFoundError, json.JSONDecodeError, OSError):
+                return None
+
+    def save_event_cache(self, date_key: str, value: dict) -> None:
+        with self._lock:
+            atomic_write_json(self.event_cache_dir / f"{date_key}.json", value)
 
     def session_secret(self) -> str:
         with self._lock:

@@ -4,7 +4,8 @@ import argparse
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
-from .renderer import save_preview
+from .events import Event, EventSelection
+from .renderer import save_event_preview, save_preview
 from .state import Settings
 from .weather import WeatherSnapshot
 
@@ -31,13 +32,43 @@ def sample(scenario: str) -> tuple[Settings, WeatherSnapshot | None, str | None]
     return settings, base, error
 
 
+def event_sample(scenario: str) -> tuple[Settings, EventSelection, str | None, str | None]:
+    def event(title: str, hour: int, venue: str, day: int = 14) -> Event:
+        start = datetime(2026, 8, day, hour, 0, tzinfo=timezone(timedelta(hours=-7)))
+        return Event(title, f"https://sf.funcheap.com/{day}-{hour}-{len(title)}/",
+                     start.isoformat(), (start + timedelta(hours=2)).isoformat(), venue,
+                     ("Top Pick", "Art & Museums"))
+    today = (
+        event("Free Rooftop Concert Downtown", 14, "Yerba Buena Gardens"),
+        event("Friday Night at the Museums", 18, "de Young Museum"),
+        event("Outdoor Movie Under the Stars", 20, "Mission Bay Commons"),
+    )
+    weekend = (
+        event("Golden Gate Park Art Festival", 10, "Hall of Flowers", 15),
+        event("Neighborhood Food and Music Fair", 13, "Kern & Diamond", 15),
+        event("Sunday Waterfront Makers Market", 11, "Ferry Building", 16),
+    )
+    if scenario == "events-long":
+        today = (event("An Exceptionally Long San Francisco Event Title That Must Fit Gracefully", 14,
+                       "An Unusually Long Venue Name Near the Waterfront"), *today[1:])
+    if scenario == "events-unavailable":
+        return Settings(), EventSelection((), ()), None, "offline"
+    fetched = (NOW - timedelta(hours=3 if scenario == "events-stale" else 0, minutes=4)).isoformat()
+    return Settings(), EventSelection(today, weekend), fetched, "offline" if scenario == "events-stale" else None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Render a deterministic 480×320 dashboard preview")
-    parser.add_argument("--scenario", choices=("day", "night", "rain", "fog", "extreme", "long-location", "stale", "no-data"), default="day")
+    parser.add_argument("--scenario", choices=("day", "night", "rain", "fog", "extreme", "long-location", "stale", "no-data",
+                                               "events", "events-long", "events-stale", "events-unavailable"), default="day")
     parser.add_argument("--output", default="examples/dashboard.png")
     args = parser.parse_args()
-    settings, weather, error = sample(args.scenario)
-    save_preview(args.output, settings, weather, NOW, error)
+    if args.scenario.startswith("events"):
+        settings, selection, fetched_at, error = event_sample(args.scenario)
+        save_event_preview(args.output, settings, selection, NOW, fetched_at, error)
+    else:
+        settings, weather, error = sample(args.scenario)
+        save_preview(args.output, settings, weather, NOW, error)
 
 
 if __name__ == "__main__": main()

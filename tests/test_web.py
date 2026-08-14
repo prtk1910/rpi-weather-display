@@ -53,4 +53,22 @@ def test_failed_login_throttling(tmp_path):
 
 def test_health_is_public_and_contains_status(tmp_path):
     client,_,_=make_client(tmp_path)
-    assert client.get("/healthz").json["display"]=="rendering"
+    body=client.get("/healthz").json
+    assert body["display"]=="rendering"
+    assert "event_cache_age_seconds" in body and "event_error" in body
+
+def test_duration_and_category_api_ui_round_trip_and_cycle_reset(tmp_path):
+    store=StateStore(tmp_path); provider=OpenMeteoProvider(Session(Response({"results":[]})))
+    weather=WeatherService(store,provider); refresh=threading.Event(); reset=threading.Event()
+    app=create_app(store,weather,provider,"test-pin",refresh,lambda:"rendering",reset)
+    app.config.update(TESTING=True); client=app.test_client(); login(client)
+    page=client.get("/settings").data
+    assert b"Weather display time" in page and b"Events display time" in page
+    assert b"Art &amp; Museums" in page and b"Fairs &amp; Festivals" in page
+    value=client.get("/api/settings").json
+    value.update(weather_scene_seconds=45,events_scene_seconds=15,
+                 event_categories=["Comedy","Live Music"])
+    response=client.put("/api/settings",json=value,headers={"X-CSRF-Token":csrf(client)})
+    assert response.status_code==200 and reset.is_set()
+    assert response.json["weather_scene_seconds"]==45
+    assert response.json["event_categories"]==["Comedy","Live Music"]

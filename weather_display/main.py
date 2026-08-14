@@ -4,6 +4,7 @@ import logging
 import os
 import signal
 import threading
+import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,12 +12,25 @@ from pathlib import Path
 import pygame
 
 from .renderer import DashboardRenderer, HEIGHT, WIDTH
+from .events import EventService, FuncheapProvider
 from .state import StateStore
 from .weather import OpenMeteoProvider, WeatherService
 from .web import create_app
 
 
 LOG = logging.getLogger("weather-display")
+
+
+class SceneRotation:
+    def __init__(self, started_at: float = 0.0):
+        self.started_at = started_at
+
+    def reset(self, now: float) -> None:
+        self.started_at = now
+
+    def scene(self, now: float, weather_seconds: int, events_seconds: int) -> str:
+        elapsed = max(0.0, now - self.started_at) % (weather_seconds + events_seconds)
+        return "weather" if elapsed < weather_seconds else "events"
 
 
 def main() -> None:
@@ -31,7 +45,8 @@ def main() -> None:
     store = StateStore(data_dir)
     provider = OpenMeteoProvider()
     weather = WeatherService(store, provider)
-    refresh_event, stop_event = threading.Event(), threading.Event()
+    events = EventService(store, FuncheapProvider())
+    refresh_event, cycle_reset_event, stop_event = threading.Event(), threading.Event(), threading.Event()
     display_state = {"value": "starting"}
 
     def weather_worker():
@@ -45,8 +60,19 @@ def main() -> None:
 
     worker = threading.Thread(target=weather_worker, name="weather-fetch", daemon=True)
     worker.start()
+    def event_worker():
+        while not stop_event.is_set():
+            try:
+                events.refresh()
+            except Exception:
+                LOG.exception("Unexpected event refresh failure")
+            stop_event.wait(3600)
+
+    event_thread = threading.Thread(target=event_worker, name="event-fetch", daemon=True)
+    event_thread.start()
     app = create_app(store, weather, provider, pin, refresh_event,
-                     display_status=lambda: display_state["value"])
+                     display_status=lambda: display_state["value"],
+                     cycle_reset_event=cycle_reset_event, events=events)
     if os.environ.get("WEATHER_DISPLAY_COOKIE_SECURE") == "1":
         app.config["SESSION_COOKIE_SECURE"] = True
     web_thread = threading.Thread(
@@ -62,6 +88,7 @@ def main() -> None:
     renderer = DashboardRenderer(screen)
     clock = pygame.time.Clock()
     running, last_key = True, None
+    rotation = SceneRotation(time.monotonic())
 
     def stop(*_):
         nonlocal running
@@ -76,10 +103,22 @@ def main() -> None:
                     running = False
             now = datetime.now(timezone.utc)
             settings = store.load_settings()
+            monotonic_now = time.monotonic()
+            if cycle_reset_event.is_set():
+                cycle_reset_event.clear()
+                rotation.reset(monotonic_now)
+            scene = rotation.scene(monotonic_now, settings.weather_scene_seconds,
+                                   settings.events_scene_seconds)
             snapshot_key = tuple(asdict(weather.snapshot).values()) if weather.snapshot else None
-            key = (now.strftime("%Y-%m-%dT%H:%M"), settings, snapshot_key, weather.last_error)
+            selection = events.selection(settings, now) if scene == "events" else None
+            key = (scene, now.strftime("%Y-%m-%dT%H:%M"), settings, snapshot_key,
+                   weather.last_error, selection, events.last_fetched_at, events.last_error)
             if key != last_key:
-                renderer.render(settings, weather.snapshot, now, weather.last_error)
+                if scene == "weather":
+                    renderer.render(settings, weather.snapshot, now, weather.last_error)
+                else:
+                    renderer.render_events(settings, selection, now, events.last_fetched_at,
+                                           events.last_error)
                 pygame.display.flip()
                 last_key = key
             clock.tick(5)
