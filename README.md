@@ -12,6 +12,8 @@ _Three current-day and three unique weekend events, ranked from the selected Fun
 
 The default location is Rincon Hill, San Francisco (`37.78521, -122.39192`) with Celsius, km/h, and a 24-hour clock. The display rotates between weather for 20 seconds and events for 10 seconds. Weather refreshes every 10 minutes and events refresh hourly; both retain their last good cached data through network outages.
 
+The events scene shows three `TODAY` listings and three unique `THIS WEEKEND` listings, each with its start time and venue. Today's data comes from Funcheap's structured RSS feed; upcoming Saturday and Sunday data comes from its machine-readable date pages. The integration excludes expired, duplicate, malformed, non-San Francisco, and Sponsored entries. It ranks exact selected-category matches first, then Top Picks and soonest start time, while unselected categories fill any remaining cards.
+
 ## Supported hardware and OS
 
 - Raspberry Pi 3B
