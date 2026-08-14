@@ -29,7 +29,7 @@ THEMES = {
 class DashboardRenderer:
     def __init__(self, surface: pygame.Surface):
         self.surface = surface
-        self.fonts = {size: pygame.font.Font(None, size) for size in (13, 16, 18, 20, 22, 24, 28, 30, 32, 34, 42, 48, 64, 72)}
+        self.fonts = {size: pygame.font.Font(None, size) for size in (13, 16, 18, 20, 22, 24, 28, 30, 32, 34, 44, 48, 68, 76)}
         for size, font in self.fonts.items():
             font.set_bold(size >= 18)
         self._icon_cache: dict[tuple, pygame.Surface] = {}
@@ -42,10 +42,10 @@ class DashboardRenderer:
         self.theme = _theme_for(icon_name)
         self.surface.fill(self.theme["bg"])
         local = local_datetime(now, settings.timezone)
-        self._text(_truncate(settings.location_label, 20), 22, TEXT, (12, 5))
-        self._text(local.strftime("%a, %b %-d"), 18, MUTED, (12, 33))
+        self._text(_truncate(settings.location_label, 18), 24, TEXT, (12, 4))
+        self._text(local.strftime("%a, %b %-d"), 20, MUTED, (12, 33))
         clock = format_clock(now, settings.timezone, settings.clock_format)
-        clock_font = 48 if settings.clock_format == "12h" else 64
+        clock_font = 48 if settings.clock_format == "12h" else 68
         self._text(clock, clock_font, TEXT, (468, 0), anchor="topright")
 
         if weather is None:
@@ -56,11 +56,11 @@ class DashboardRenderer:
         else:
             condition, icon = condition_for(weather.weather_code, weather.is_day)
             self._draw_icon(icon, (36, 80), 98)
-            self._text(f"{rounded(weather.temperature)}{weather.temperature_unit}", 72, self.theme["accent"], (148, 55))
-            self._text(condition, 30, TEXT, (151, 126))
+            self._text(f"{rounded(weather.temperature)}{weather.temperature_unit}", 76, self.theme["accent"], (148, 51))
+            self._text(condition, 32, TEXT, (151, 125))
             secondary = (f"Feels {rounded(weather.apparent_temperature)}°  "
                          f"H {rounded(weather.high)}°  L {rounded(weather.low)}°")
-            self._text(secondary, 20, MUTED, (151, 158))
+            self._text(secondary, 22, MUTED, (151, 157))
             self._draw_cards(weather)
 
         fetched = _parse_time(weather.fetched_at) if weather else None
@@ -79,22 +79,22 @@ class DashboardRenderer:
         for rect in cards:
             pygame.draw.rect(self.surface, self.theme["card"], rect, border_radius=10)
         if not weather:
-            self._text("WIND", 18, MUTED, (18, 198))
-            self._text("UV NOW", 18, MUTED, (176, 198))
-            self._text("RAIN NOW", 18, MUTED, (334, 198))
-            for x in (18, 176, 334): self._text("—", 42, TEXT, (x, 222))
+            self._text("WIND", 20, MUTED, (18, 197))
+            self._text("UV NOW", 20, MUTED, (176, 197))
+            self._text("RAIN NOW", 20, MUTED, (334, 197))
+            for x in (18, 176, 334): self._text("—", 44, TEXT, (x, 220))
             return
         wind = f"{rounded(weather.wind_speed)} {weather.wind_unit}"
         direction = compass_direction(weather.wind_direction)
-        self._text(f"WIND · {direction}", 18, MUTED, (18, 198))
-        self._text("UV NOW", 18, MUTED, (176, 198))
-        self._text("RAIN NOW", 18, MUTED, (334, 198))
-        self._text(wind, 32 if len(wind) < 10 else 28, TEXT, (18, 222))
-        self._text(f"Gusts {rounded(weather.wind_gusts)} {weather.wind_unit}", 18, MUTED, (18, 265))
-        self._text(str(round(weather.uv_index, 1)), 42, self.theme["accent"], (176, 218))
-        self._text(uv_risk(weather.uv_index), 18, MUTED, (176, 265))
-        self._text(f"{weather.precipitation_probability}%", 42, self.theme["accent"], (334, 218))
-        self._text("next hour", 18, MUTED, (334, 265))
+        self._text(f"WIND · {direction}", 20, MUTED, (18, 197))
+        self._text("UV NOW", 20, MUTED, (176, 197))
+        self._text("RAIN NOW", 20, MUTED, (334, 197))
+        self._text(wind, 34 if len(wind) < 10 else 30, TEXT, (18, 220))
+        self._text(f"Gusts {rounded(weather.wind_gusts)} {weather.wind_unit}", 20, MUTED, (18, 264))
+        self._text(str(round(weather.uv_index, 1)), 44, self.theme["accent"], (176, 216))
+        self._text(uv_risk(weather.uv_index), 20, MUTED, (176, 264))
+        self._text(f"{weather.precipitation_probability}%", 44, self.theme["accent"], (334, 216))
+        self._text("next hour", 20, MUTED, (334, 264))
 
     def _text(self, value: str, size: int, color: tuple[int, int, int], pos: tuple[int, int], anchor="topleft"):
         rendered = self.fonts[size].render(str(value), True, color)
