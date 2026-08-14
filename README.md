@@ -68,6 +68,10 @@ From a phone or computer on the same LAN, open:
 
 The settings app searches places, ZIP codes, and neighborhoods; allows exact coordinate/timezone edits; and switches metric/imperial units and 12/24-hour time. A saved change triggers an immediate fetch and redraw.
 
+![Weather display settings web app on desktop](examples/web-settings.png)
+
+_The responsive LAN settings app, shown in a desktop browser._
+
 ## Service management and updates
 
 ```sh
