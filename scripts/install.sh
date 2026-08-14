@@ -48,7 +48,7 @@ cp -a "$SOURCE_DIR/weather_display" "$SOURCE_DIR/systemd" "$INSTALL_DIR/"
 install -m 0644 "$SOURCE_DIR/pyproject.toml" "$SOURCE_DIR/requirements.txt" \
   "$SOURCE_DIR/LICENSE" "$SOURCE_DIR/README.md" "$INSTALL_DIR/"
 python3 -m venv --system-site-packages "$INSTALL_DIR/.venv"
-"$INSTALL_DIR/.venv/bin/pip" install --disable-pip-version-check --no-deps "$INSTALL_DIR"
+"$INSTALL_DIR/.venv/bin/pip" install --disable-pip-version-check --no-deps --force-reinstall "$INSTALL_DIR"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 umask 077
 printf 'WEATHER_DISPLAY_PIN=%s\n' "$WEATHER_DISPLAY_PIN" > /etc/weather-display/environment

@@ -7,6 +7,9 @@ ROOT=Path(__file__).parents[1]
 
 def test_installer_shell_syntax(): subprocess.run(["bash","-n",ROOT/"scripts/install.sh"],check=True)
 
+def test_installer_reinstalls_same_version_updates():
+    assert "--force-reinstall" in (ROOT/"scripts/install.sh").read_text()
+
 def test_xrandr_primary_mode_parser():
     line="Unknown19-1 connected primary 480x320+0+0 (normal left inverted right x axis y axis)"
     program='/ connected / {for (i=1; i<=NF; i++) if ($i ~ /^[0-9]+x[0-9]+\\+/) {print $i; exit}}'

@@ -13,12 +13,12 @@ from .weather import WeatherSnapshot
 
 WIDTH, HEIGHT = 480, 320
 TEXT = (239, 244, 247)
-MUTED = (166, 180, 191)
+MUTED = (181, 194, 204)
 THEMES = {
     "default": {"bg": (9, 15, 21), "card": (21, 31, 40), "accent": (99, 190, 226), "warm": (244, 194, 72)},
     "clear": {"bg": (8, 25, 38), "card": (17, 47, 63), "accent": (255, 202, 79), "warm": (255, 202, 79)},
     "night": {"bg": (12, 15, 37), "card": (28, 31, 65), "accent": (174, 190, 255), "warm": (213, 220, 255)},
-    "cloud": {"bg": (13, 23, 30), "card": (25, 42, 50), "accent": (168, 203, 218), "warm": (242, 190, 72)},
+    "cloud": {"bg": (10, 23, 31), "card": (24, 48, 59), "accent": (121, 207, 238), "warm": (242, 190, 72)},
     "rain": {"bg": (8, 20, 33), "card": (16, 39, 57), "accent": (83, 181, 235), "warm": (244, 190, 72)},
     "fog": {"bg": (22, 28, 31), "card": (39, 48, 52), "accent": (190, 211, 216), "warm": (242, 190, 72)},
     "snow": {"bg": (15, 27, 39), "card": (30, 50, 65), "accent": (205, 235, 247), "warm": (242, 190, 72)},
@@ -29,7 +29,9 @@ THEMES = {
 class DashboardRenderer:
     def __init__(self, surface: pygame.Surface):
         self.surface = surface
-        self.fonts = {size: pygame.font.Font(None, size) for size in (13, 15, 16, 18, 20, 24, 26, 28, 34, 48, 58, 64)}
+        self.fonts = {size: pygame.font.Font(None, size) for size in (13, 16, 18, 20, 22, 24, 28, 30, 32, 34, 42, 48, 64, 72)}
+        for size, font in self.fonts.items():
+            font.set_bold(size >= 18)
         self._icon_cache: dict[tuple, pygame.Surface] = {}
         self.theme = THEMES["default"]
 
@@ -40,25 +42,25 @@ class DashboardRenderer:
         self.theme = _theme_for(icon_name)
         self.surface.fill(self.theme["bg"])
         local = local_datetime(now, settings.timezone)
-        self._text(_truncate(settings.location_label, 24), 20, TEXT, (12, 7))
-        self._text(local.strftime("%a, %b %-d"), 16, MUTED, (12, 31))
+        self._text(_truncate(settings.location_label, 20), 22, TEXT, (12, 5))
+        self._text(local.strftime("%a, %b %-d"), 18, MUTED, (12, 33))
         clock = format_clock(now, settings.timezone, settings.clock_format)
-        clock_font = 48 if settings.clock_format == "12h" else 58
-        self._text(clock, clock_font, TEXT, (468, 3), anchor="topright")
+        clock_font = 48 if settings.clock_format == "12h" else 64
+        self._text(clock, clock_font, TEXT, (468, 0), anchor="topright")
 
         if weather is None:
-            self._draw_icon("unknown", (68, 116), 68)
-            self._text("Waiting for weather", 26, TEXT, (150, 105))
-            self._text("Retrying automatically…", 18, MUTED, (150, 137))
+            self._draw_icon("unknown", (40, 82), 96)
+            self._text("Waiting for weather", 30, TEXT, (150, 99))
+            self._text("Retrying automatically…", 20, MUTED, (150, 139))
             self._draw_cards(None)
         else:
             condition, icon = condition_for(weather.weather_code, weather.is_day)
-            self._draw_icon(icon, (60, 98), 84)
-            self._text(f"{rounded(weather.temperature)}{weather.temperature_unit}", 64, self.theme["accent"], (150, 66))
-            self._text(condition, 26, TEXT, (153, 128))
+            self._draw_icon(icon, (36, 80), 98)
+            self._text(f"{rounded(weather.temperature)}{weather.temperature_unit}", 72, self.theme["accent"], (148, 55))
+            self._text(condition, 30, TEXT, (151, 126))
             secondary = (f"Feels {rounded(weather.apparent_temperature)}°  "
                          f"H {rounded(weather.high)}°  L {rounded(weather.low)}°")
-            self._text(secondary, 18, MUTED, (153, 153))
+            self._text(secondary, 20, MUTED, (151, 158))
             self._draw_cards(weather)
 
         fetched = _parse_time(weather.fetched_at) if weather else None
@@ -73,23 +75,26 @@ class DashboardRenderer:
         self._text(status, 13, (231, 150, 75) if stale or error else MUTED, (472, 305), anchor="topright")
 
     def _draw_cards(self, weather: WeatherSnapshot | None) -> None:
-        cards = ((8, 186, 150, 110), (165, 186, 150, 110), (322, 186, 150, 110))
+        cards = ((6, 186, 152, 110), (164, 186, 152, 110), (322, 186, 152, 110))
         for rect in cards:
             pygame.draw.rect(self.surface, self.theme["card"], rect, border_radius=10)
-        self._text("WIND", 16, MUTED, (20, 198))
-        self._text("UV NOW", 16, MUTED, (177, 198))
-        self._text("RAIN NOW", 16, MUTED, (334, 198))
         if not weather:
-            for x in (20, 177, 334): self._text("—", 34, TEXT, (x, 229))
+            self._text("WIND", 18, MUTED, (18, 198))
+            self._text("UV NOW", 18, MUTED, (176, 198))
+            self._text("RAIN NOW", 18, MUTED, (334, 198))
+            for x in (18, 176, 334): self._text("—", 42, TEXT, (x, 222))
             return
         wind = f"{rounded(weather.wind_speed)} {weather.wind_unit}"
-        self._text(wind, 28 if len(wind) < 10 else 24, TEXT, (20, 226))
         direction = compass_direction(weather.wind_direction)
-        self._text(f"{direction} · gust {rounded(weather.wind_gusts)}", 16, MUTED, (20, 265))
-        self._text(str(round(weather.uv_index, 1)), 34, self.theme["accent"], (177, 225))
-        self._text(uv_risk(weather.uv_index), 16, MUTED, (177, 265))
-        self._text(f"{weather.precipitation_probability}%", 34, self.theme["accent"], (334, 225))
-        self._text("this hour", 16, MUTED, (334, 265))
+        self._text(f"WIND · {direction}", 18, MUTED, (18, 198))
+        self._text("UV NOW", 18, MUTED, (176, 198))
+        self._text("RAIN NOW", 18, MUTED, (334, 198))
+        self._text(wind, 32 if len(wind) < 10 else 28, TEXT, (18, 222))
+        self._text(f"Gusts {rounded(weather.wind_gusts)} {weather.wind_unit}", 18, MUTED, (18, 265))
+        self._text(str(round(weather.uv_index, 1)), 42, self.theme["accent"], (176, 218))
+        self._text(uv_risk(weather.uv_index), 18, MUTED, (176, 265))
+        self._text(f"{weather.precipitation_probability}%", 42, self.theme["accent"], (334, 218))
+        self._text("next hour", 18, MUTED, (334, 265))
 
     def _text(self, value: str, size: int, color: tuple[int, int, int], pos: tuple[int, int], anchor="topleft"):
         rendered = self.fonts[size].render(str(value), True, color)
