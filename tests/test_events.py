@@ -3,8 +3,8 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from weather_display.events import (Event, EventError, EventService, parse_date_page,
-                                    parse_rss, weekend_dates)
+from weather_display.events import (Event, EventError, EventService, FuncheapProvider,
+                                    parse_date_page, parse_rss, weekend_dates)
 from weather_display.state import Settings, StateStore
 
 
@@ -75,6 +75,26 @@ def test_parse_future_page_uses_classes_and_machine_readable_time():
     assert result[0].categories == ("Top Pick", "Fairs & Festivals")
     assert result[0].start == "2026-08-15T10:00:00-07:00"
     assert result[0].venue == "Civic Center"
+
+
+def test_provider_uses_funcheap_date_path_segments():
+    class Response:
+        text = page_event()
+
+        def raise_for_status(self):
+            pass
+
+    class Session:
+        def __init__(self):
+            self.url = None
+
+        def get(self, url, **_kwargs):
+            self.url = url
+            return Response()
+
+    session = Session()
+    assert FuncheapProvider(session).fetch_date(date(2026, 8, 15))
+    assert session.url == "https://sf.funcheap.com/2026/08/15/"
 
 
 def test_future_page_filters_sponsored_non_sf_and_malformed():

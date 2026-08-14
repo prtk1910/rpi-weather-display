@@ -16,7 +16,7 @@ from .state import EVENT_CATEGORIES, Settings, StateStore
 
 
 RSS_URL = "https://sf.funcheap.com/rss-date/"
-DATE_URL = "https://sf.funcheap.com/{date}/"
+DATE_URL = "https://sf.funcheap.com/{year:04d}/{month:02d}/{day:02d}/"
 PACIFIC = ZoneInfo("America/Los_Angeles")
 _CATEGORY_SLUGS = {
     "top-pick": "Top Pick",
@@ -96,7 +96,8 @@ class FuncheapProvider:
         return parse_rss(self._get(RSS_URL))
 
     def fetch_date(self, value: date) -> list[Event]:
-        return parse_date_page(self._get(DATE_URL.format(date=value.isoformat())))
+        return parse_date_page(self._get(DATE_URL.format(
+            year=value.year, month=value.month, day=value.day)))
 
     def _get(self, url: str) -> str:
         try:
