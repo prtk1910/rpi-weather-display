@@ -1,0 +1,33 @@
+[Unit]
+Description=Always-on weather display
+Wants=network-online.target graphical-session.target
+After=network-online.target display-manager.service
+
+[Service]
+Type=simple
+User=@SERVICE_USER@
+Group=@SERVICE_USER@
+WorkingDirectory=@INSTALL_DIR@
+EnvironmentFile=/etc/weather-display/environment
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=@USER_HOME@/.Xauthority
+Environment=SDL_VIDEODRIVER=x11
+Environment=SDL_AUDIODRIVER=dummy
+Environment=PYGAME_HIDE_SUPPORT_PROMPT=1
+Environment=MESA_SHADER_CACHE_DISABLE=true
+Environment=XDG_RUNTIME_DIR=/run/weather-display
+Environment=WEATHER_DISPLAY_DATA_DIR=/var/lib/weather-display
+ExecStartPre=-/usr/bin/xset -display :0 s off
+ExecStartPre=-/usr/bin/xset -display :0 -dpms
+ExecStart=@INSTALL_DIR@/.venv/bin/weather-display
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+RuntimeDirectory=weather-display
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/weather-display
+
+[Install]
+WantedBy=graphical.target

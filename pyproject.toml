@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rpi-weather-display"
+version = "1.0.0"
+description = "Always-on Raspberry Pi weather dashboard"
+requires-python = ">=3.11"
+license = {text = "GPL-3.0-only"}
+dependencies = [
+  "Flask==3.1.1",
+  "pygame==2.6.1",
+  "requests==2.32.4",
+]
+
+[project.scripts]
+weather-display = "weather_display.main:main"
+weather-preview = "weather_display.preview:main"
+
+[tool.setuptools.packages.find]
+include = ["weather_display*"]
+
+[tool.setuptools.package-data]
+weather_display = ["templates/*.html", "static/*.css", "static/*.js"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["."]
