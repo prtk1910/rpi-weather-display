@@ -8,7 +8,7 @@ _Live 480×320 screenshot captured from the installed Raspberry Pi display._
 
 ![San Francisco events scene](examples/events-dashboard.png)
 
-_Live Pi capture after the weekend-date fix: three current-day and three unique weekend events, ranked from the selected Funcheap categories._
+_Live Pi capture showing three current-day and three unique weekend events, ranked from the selected Funcheap categories._
 
 The default location is Rincon Hill, San Francisco (`37.78521, -122.39192`) with Celsius, km/h, and a 24-hour clock. The display rotates between weather for 20 seconds and events for 10 seconds. Weather refreshes every 10 minutes and events refresh hourly; both retain their last good cached data through network outages.
 
