@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pygame
 
-from .renderer import DashboardRenderer, HEIGHT, WIDTH
+from .renderer import DashboardRenderer, HEIGHT, SCENE_BUTTON_RECT, WIDTH
 from .events import EVENT_REFRESH_SECONDS, EventService, FuncheapProvider
 from .state import StateStore
 from .weather import OpenMeteoProvider, WeatherService
@@ -36,6 +36,17 @@ class SceneRotation:
     def scene(self, now: float, weather_seconds: int, events_seconds: int) -> str:
         elapsed = max(0.0, now - self.started_at) % (weather_seconds + events_seconds)
         return "weather" if elapsed < weather_seconds else "events"
+
+
+def toggle_scene(rotation: SceneRotation, now: float, weather_seconds: int,
+                 events_seconds: int, events_ready: bool) -> bool:
+    if not events_ready:
+        return False
+    if rotation.scene(now, weather_seconds, events_seconds) == "weather":
+        rotation.show_events(now, weather_seconds)
+    else:
+        rotation.reset(now)
+    return True
 
 
 def disable_screen_blanking(runner=subprocess.run, display: str | None = None) -> bool:
@@ -122,7 +133,8 @@ def main() -> None:
     x11_display = pygame.display.get_driver() == "x11"
     if x11_display:
         disable_screen_blanking()
-    renderer = DashboardRenderer(screen)
+    frame = pygame.Surface((WIDTH, HEIGHT))
+    renderer = DashboardRenderer(frame)
     clock = pygame.time.Clock()
     running, last_key = True, None
     rotation = SceneRotation(time.monotonic())
@@ -136,9 +148,16 @@ def main() -> None:
     display_state["value"] = "rendering"
     try:
         while running:
+            touch_toggle_requested = False
             for event in pygame.event.get():
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                     running = False
+                elif event.type == pygame.MOUSEBUTTONUP and SCENE_BUTTON_RECT.collidepoint(event.pos):
+                    touch_toggle_requested = True
+                elif event.type == pygame.FINGERUP:
+                    point = (round(event.x * WIDTH), round(event.y * HEIGHT))
+                    if SCENE_BUTTON_RECT.collidepoint(point):
+                        touch_toggle_requested = True
             now = datetime.now(timezone.utc)
             settings = store.load_settings()
             monotonic_now = time.monotonic()
@@ -148,14 +167,12 @@ def main() -> None:
             if cycle_reset_event.is_set():
                 cycle_reset_event.clear()
                 rotation.reset(monotonic_now)
-            if display_toggle_event.is_set() and events_ready_event.is_set():
+            if touch_toggle_requested:
+                display_toggle_event.set()
+            if display_toggle_event.is_set() and toggle_scene(
+                    rotation, monotonic_now, settings.weather_scene_seconds,
+                    settings.events_scene_seconds, events_ready_event.is_set()):
                 display_toggle_event.clear()
-                current_scene = rotation.scene(monotonic_now, settings.weather_scene_seconds,
-                                               settings.events_scene_seconds)
-                if current_scene == "weather":
-                    rotation.show_events(monotonic_now, settings.weather_scene_seconds)
-                else:
-                    rotation.reset(monotonic_now)
             if events_ready_event.is_set():
                 scene = rotation.scene(monotonic_now, settings.weather_scene_seconds,
                                        settings.events_scene_seconds)
@@ -172,6 +189,7 @@ def main() -> None:
                 else:
                     renderer.render_events(settings, selection, now, events.last_fetched_at,
                                            events.last_error)
+                screen.blit(frame, (0, 0))
                 pygame.display.flip()
                 last_key = key
             clock.tick(5)

@@ -14,6 +14,7 @@ from .weather import WeatherSnapshot
 
 
 WIDTH, HEIGHT = 480, 320
+SCENE_BUTTON_RECT = pygame.Rect(196, 5, 88, 30)
 TEXT = (239, 244, 247)
 MUTED = (181, 194, 204)
 THEMES = {
@@ -75,6 +76,7 @@ class DashboardRenderer:
             status = "No cached data · retrying"
         self._text("Weather data by Open-Meteo.com", 13, MUTED, (8, 305))
         self._text(status, 13, (231, 150, 75) if stale or error else MUTED, (472, 305), anchor="topright")
+        self._scene_button("EVENTS")
 
     def render_events(self, settings: Settings, selection: EventSelection,
                       now: datetime | None = None, fetched_at: str | None = None,
@@ -100,6 +102,12 @@ class DashboardRenderer:
         self._text("Events by Funcheap", 13, MUTED, (8, 305))
         self._text(status, 13, (231, 150, 75) if stale or error or not fetched else MUTED,
                    (472, 305), anchor="topright")
+        self._scene_button("WEATHER")
+
+    def _scene_button(self, label: str) -> None:
+        pygame.draw.rect(self.surface, self.theme["card"], SCENE_BUTTON_RECT, border_radius=8)
+        pygame.draw.rect(self.surface, self.theme["accent"], SCENE_BUTTON_RECT, width=1, border_radius=8)
+        self._text(label, 16, TEXT, SCENE_BUTTON_RECT.center, anchor="center")
 
     def _event_column(self, heading: str, events: tuple[Event, ...], x: int, y: int,
                       weekend: bool) -> None:

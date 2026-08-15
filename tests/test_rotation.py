@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from weather_display.main import SceneRotation, disable_screen_blanking
+from weather_display.main import SceneRotation, disable_screen_blanking, toggle_scene
 
 
 def test_rotation_uses_independent_durations_and_boundaries():
@@ -26,6 +26,16 @@ def test_manual_switch_shows_events_for_the_full_configured_duration():
     assert rotation.scene(105.0, 20, 10) == "events"
     assert rotation.scene(114.999, 20, 10) == "events"
     assert rotation.scene(115.0, 20, 10) == "weather"
+
+
+def test_touch_or_web_toggle_switches_both_directions_and_waits_for_cache():
+    rotation = SceneRotation(100.0)
+    assert toggle_scene(rotation, 105.0, 20, 10, False) is False
+    assert rotation.scene(105.0, 20, 10) == "weather"
+    assert toggle_scene(rotation, 105.0, 20, 10, True) is True
+    assert rotation.scene(105.0, 20, 10) == "events"
+    assert toggle_scene(rotation, 106.0, 20, 10, True) is True
+    assert rotation.scene(106.0, 20, 10) == "weather"
 
 
 def test_screen_blanking_is_disabled_after_x11_is_ready():

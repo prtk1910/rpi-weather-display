@@ -72,7 +72,7 @@ From a phone or computer on the same LAN, open:
 - `http://weather-display.local:8080`
 - `http://<pi-ip-address>:8080` if mDNS is unavailable
 
-The settings app searches places, ZIP codes, and neighborhoods; allows exact coordinate/timezone edits; switches metric/imperial units and 12/24-hour time; configures each scene from 5–300 seconds; and prioritizes any OR-based selection of Funcheap's official categories. A save immediately restarts the cycle on weather, while the compact “Switch display now” button toggles the physical screen between weather and events on demand.
+The settings app searches places, ZIP codes, and neighborhoods; allows exact coordinate/timezone edits; switches metric/imperial units and 12/24-hour time; configures each scene from 5–300 seconds; and prioritizes any OR-based selection of Funcheap's official categories. A save immediately restarts the cycle on weather. The compact control in the web app—or the `EVENTS`/`WEATHER` touch button at the top of the Pi screen—switches scenes on demand.
 
 ![Weather display settings web app on desktop](examples/web-settings.png)
 
