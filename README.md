@@ -63,7 +63,7 @@ cd rpi-weather-display
 sudo WEATHER_DISPLAY_PIN='choose-a-private-pin' scripts/install.sh
 ```
 
-The installer validates Bookworm, X11, and the active screen mode; installs stable APT packages; creates `/opt/weather-display/.venv`; and installs a non-root systemd service. It sets the hostname to `weather-display`, enables mDNS, and keeps X11 blanking/DPMS disabled after the display connection is ready.
+The installer validates Bookworm, X11, and the active screen mode; installs stable APT packages; creates `/opt/weather-display/.venv`; and installs a non-root systemd service. It sets the hostname to `weather-display`, enables mDNS, and disables X11 blanking/DPMS after the display connection is ready.
 
 The PIN is written with root-only permissions to `/etc/weather-display/environment`. Settings, the session secret, cached weather, and date-partitioned event caches live in `/var/lib/weather-display`. None are inside the Git checkout. `WEATHER_DISPLAY_PIN` is mandatory; the service exits immediately if it is absent.
 
@@ -125,7 +125,7 @@ WEATHER_DISPLAY_WINDOWED=1 python -m weather_display.main
 
 - **Black screen or SDL/X11 error:** confirm the Desktop session is running under X11, `DISPLAY=:0`, the user's `.Xauthority` exists, and `xrandr` sees 480×320.
 - **Service starts before the desktop:** inspect `journalctl`; after the autologin desktop is ready, restart the service. The unit orders itself after the display manager and retries failures.
-- **Screen blanks:** run `vcgencmd get_throttled`; flags such as `0x50000` indicate that undervoltage and throttling have occurred, so check the power supply and cable. The app reapplies `xset s off`, `xset s noblank`, and `xset -dpms` after connecting to X11 and every five minutes. Also disable any desktop screensaver.
+- **Screen blanks:** run `vcgencmd get_throttled`; flags such as `0x50000` indicate that undervoltage and throttling have occurred, so check the power supply and cable. The app applies `xset s off`, `xset s noblank`, and `xset -dpms` after connecting to X11. Also disable any desktop screensaver.
 - **Settings site is unreachable:** confirm both devices are on the same LAN, port 8080 is allowed, and try the Pi's IP address. Check `systemctl status avahi-daemon` for `.local` naming.
 - **Weather is stale:** `/healthz` exposes cache age and the most recent sanitized fetch error. Cached data remains on screen while requests retry.
 - **Events are stale:** `/healthz` separately exposes event cache age and the latest partial or complete Funcheap refresh error. Each date keeps its last successful cache if another date fails.

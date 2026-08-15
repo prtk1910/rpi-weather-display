@@ -20,9 +20,6 @@ from .web import create_app
 
 
 LOG = logging.getLogger("weather-display")
-SCREEN_BLANKING_REFRESH_SECONDS = 5 * 60
-
-
 class SceneRotation:
     def __init__(self, started_at: float = 0.0):
         self.started_at = started_at
@@ -138,7 +135,6 @@ def main() -> None:
     clock = pygame.time.Clock()
     running, last_key = True, None
     rotation = SceneRotation(time.monotonic())
-    blanking_checked_at = time.monotonic()
 
     def stop(*_):
         nonlocal running
@@ -161,9 +157,6 @@ def main() -> None:
             now = datetime.now(timezone.utc)
             settings = store.load_settings()
             monotonic_now = time.monotonic()
-            if x11_display and monotonic_now - blanking_checked_at >= SCREEN_BLANKING_REFRESH_SECONDS:
-                disable_screen_blanking()
-                blanking_checked_at = monotonic_now
             if cycle_reset_event.is_set():
                 cycle_reset_event.clear()
                 rotation.reset(monotonic_now)
