@@ -135,6 +135,7 @@ def main() -> None:
     clock = pygame.time.Clock()
     running, last_key = True, None
     rotation = SceneRotation(time.monotonic())
+    last_loop_at = time.perf_counter()
 
     def stop(*_):
         nonlocal running
@@ -144,8 +145,16 @@ def main() -> None:
     display_state["value"] = "rendering"
     try:
         while running:
+            loop_at = time.perf_counter()
+            loop_gap_ms = (loop_at - last_loop_at) * 1000
+            if loop_gap_ms > 1000:
+                LOG.warning("Display loop stalled for %.1f ms", loop_gap_ms)
+            last_loop_at = loop_at
             touch_toggle_requested = False
             for event in pygame.event.get():
+                event_name = pygame.event.event_name(event.type)
+                if event_name.startswith("Window"):
+                    LOG.info("Display event: %s", event_name)
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                     running = False
                 elif event.type == pygame.MOUSEBUTTONUP and SCENE_BUTTON_RECT.collidepoint(event.pos):
@@ -173,17 +182,27 @@ def main() -> None:
                 rotation.reset(monotonic_now)
                 scene = "weather"
             snapshot_key = tuple(asdict(weather.snapshot).values()) if weather.snapshot else None
+            prepare_started = time.perf_counter()
             selection = events.selection(settings, now) if scene == "events" else None
+            prepare_ms = (time.perf_counter() - prepare_started) * 1000
             key = (scene, now.strftime("%Y-%m-%dT%H:%M"), settings, snapshot_key,
                    weather.last_error, selection, events.last_fetched_at, events.last_error)
             if key != last_key:
+                scene_changed = last_key is None or scene != last_key[0]
+                render_started = time.perf_counter()
                 if scene == "weather":
                     renderer.render(settings, weather.snapshot, now, weather.last_error)
                 else:
                     renderer.render_events(settings, selection, now, events.last_fetched_at,
                                            events.last_error)
+                render_ms = (time.perf_counter() - render_started) * 1000
                 screen.blit(frame, (0, 0))
+                flip_started = time.perf_counter()
                 pygame.display.flip()
+                flip_ms = (time.perf_counter() - flip_started) * 1000
+                if scene_changed or prepare_ms > 250 or render_ms > 250 or flip_ms > 250:
+                    LOG.info("Displayed %s scene: prepare=%.1f ms render=%.1f ms flip=%.1f ms",
+                             scene, prepare_ms, render_ms, flip_ms)
                 last_key = key
             clock.tick(5)
     finally:
