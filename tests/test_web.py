@@ -72,3 +72,15 @@ def test_duration_and_category_api_ui_round_trip_and_cycle_reset(tmp_path):
     assert response.status_code==200 and reset.is_set()
     assert response.json["weather_scene_seconds"]==45
     assert response.json["event_categories"]==["Comedy","Live Music"]
+
+def test_manual_display_toggle_requires_auth_and_csrf(tmp_path):
+    store=StateStore(tmp_path); provider=OpenMeteoProvider(Session(Response({"results":[]})))
+    weather=WeatherService(store,provider); toggle=threading.Event()
+    app=create_app(store,weather,provider,"test-pin",display_toggle_event=toggle)
+    app.config.update(TESTING=True); client=app.test_client()
+    assert client.post("/api/display/toggle").status_code==401
+    login(client)
+    assert b"Switch display now" in client.get("/settings").data
+    assert client.post("/api/display/toggle").status_code==403
+    response=client.post("/api/display/toggle",headers={"X-CSRF-Token":csrf(client)})
+    assert response.status_code==200 and toggle.is_set()

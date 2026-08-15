@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import signal
+import subprocess
 import threading
 import time
 from dataclasses import asdict
@@ -12,13 +13,14 @@ from pathlib import Path
 import pygame
 
 from .renderer import DashboardRenderer, HEIGHT, WIDTH
-from .events import EventService, FuncheapProvider
+from .events import EVENT_REFRESH_SECONDS, EventService, FuncheapProvider
 from .state import StateStore
 from .weather import OpenMeteoProvider, WeatherService
 from .web import create_app
 
 
 LOG = logging.getLogger("weather-display")
+SCREEN_BLANKING_REFRESH_SECONDS = 5 * 60
 
 
 class SceneRotation:
@@ -28,9 +30,31 @@ class SceneRotation:
     def reset(self, now: float) -> None:
         self.started_at = now
 
+    def show_events(self, now: float, weather_seconds: int) -> None:
+        self.started_at = now - weather_seconds
+
     def scene(self, now: float, weather_seconds: int, events_seconds: int) -> str:
         elapsed = max(0.0, now - self.started_at) % (weather_seconds + events_seconds)
         return "weather" if elapsed < weather_seconds else "events"
+
+
+def disable_screen_blanking(runner=subprocess.run, display: str | None = None) -> bool:
+    """Disable X11 blanking after the display connection is known to be ready."""
+    display = display or os.environ.get("DISPLAY", ":0")
+    commands = (["xset", "-display", display, "s", "off"],
+                ["xset", "-display", display, "s", "noblank"],
+                ["xset", "-display", display, "-dpms"])
+    try:
+        results = [runner(command, check=False, stdout=subprocess.DEVNULL,
+                          stderr=subprocess.PIPE, text=True) for command in commands]
+    except OSError as exc:
+        LOG.warning("Could not disable X11 screen blanking: %s", exc)
+        return False
+    failed = [result.stderr.strip() for result in results if result.returncode]
+    if failed:
+        LOG.warning("Could not disable X11 screen blanking: %s", failed[0])
+        return False
+    return True
 
 
 def main() -> None:
@@ -46,7 +70,11 @@ def main() -> None:
     provider = OpenMeteoProvider()
     weather = WeatherService(store, provider)
     events = EventService(store, FuncheapProvider())
-    refresh_event, cycle_reset_event, stop_event = threading.Event(), threading.Event(), threading.Event()
+    refresh_event = threading.Event()
+    cycle_reset_event = threading.Event()
+    display_toggle_event = threading.Event()
+    events_ready_event = threading.Event()
+    stop_event = threading.Event()
     display_state = {"value": "starting"}
 
     def weather_worker():
@@ -62,17 +90,23 @@ def main() -> None:
     worker.start()
     def event_worker():
         while not stop_event.is_set():
-            try:
-                events.refresh()
-            except Exception:
-                LOG.exception("Unexpected event refresh failure")
-            stop_event.wait(3600)
+            delay = events.seconds_until_refresh()
+            if delay <= 0:
+                try:
+                    events.refresh()
+                except Exception:
+                    LOG.exception("Unexpected event refresh failure")
+                delay = EVENT_REFRESH_SECONDS
+                cycle_reset_event.set()
+            events_ready_event.set()
+            stop_event.wait(max(1, delay))
 
     event_thread = threading.Thread(target=event_worker, name="event-fetch", daemon=True)
     event_thread.start()
     app = create_app(store, weather, provider, pin, refresh_event,
                      display_status=lambda: display_state["value"],
-                     cycle_reset_event=cycle_reset_event, events=events)
+                     cycle_reset_event=cycle_reset_event, events=events,
+                     display_toggle_event=display_toggle_event)
     if os.environ.get("WEATHER_DISPLAY_COOKIE_SECURE") == "1":
         app.config["SESSION_COOKIE_SECURE"] = True
     web_thread = threading.Thread(
@@ -85,10 +119,14 @@ def main() -> None:
     screen = pygame.display.set_mode((WIDTH, HEIGHT), flags)
     pygame.display.set_caption("Weather Display")
     pygame.mouse.set_visible(False)
+    x11_display = pygame.display.get_driver() == "x11"
+    if x11_display:
+        disable_screen_blanking()
     renderer = DashboardRenderer(screen)
     clock = pygame.time.Clock()
     running, last_key = True, None
     rotation = SceneRotation(time.monotonic())
+    blanking_checked_at = time.monotonic()
 
     def stop(*_):
         nonlocal running
@@ -104,11 +142,26 @@ def main() -> None:
             now = datetime.now(timezone.utc)
             settings = store.load_settings()
             monotonic_now = time.monotonic()
+            if x11_display and monotonic_now - blanking_checked_at >= SCREEN_BLANKING_REFRESH_SECONDS:
+                disable_screen_blanking()
+                blanking_checked_at = monotonic_now
             if cycle_reset_event.is_set():
                 cycle_reset_event.clear()
                 rotation.reset(monotonic_now)
-            scene = rotation.scene(monotonic_now, settings.weather_scene_seconds,
-                                   settings.events_scene_seconds)
+            if display_toggle_event.is_set() and events_ready_event.is_set():
+                display_toggle_event.clear()
+                current_scene = rotation.scene(monotonic_now, settings.weather_scene_seconds,
+                                               settings.events_scene_seconds)
+                if current_scene == "weather":
+                    rotation.show_events(monotonic_now, settings.weather_scene_seconds)
+                else:
+                    rotation.reset(monotonic_now)
+            if events_ready_event.is_set():
+                scene = rotation.scene(monotonic_now, settings.weather_scene_seconds,
+                                       settings.events_scene_seconds)
+            else:
+                rotation.reset(monotonic_now)
+                scene = "weather"
             snapshot_key = tuple(asdict(weather.snapshot).values()) if weather.snapshot else None
             selection = events.selection(settings, now) if scene == "events" else None
             key = (scene, now.strftime("%Y-%m-%dT%H:%M"), settings, snapshot_key,

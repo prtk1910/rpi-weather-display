@@ -18,6 +18,7 @@ from .state import EVENT_CATEGORIES, Settings, StateStore
 RSS_URL = "https://sf.funcheap.com/rss-date/"
 DATE_URL = "https://sf.funcheap.com/{year:04d}/{month:02d}/{day:02d}/"
 PACIFIC = ZoneInfo("America/Los_Angeles")
+EVENT_REFRESH_SECONDS = 6 * 60 * 60
 _CATEGORY_SLUGS = {
     "top-pick": "Top Pick",
     "art-museums": "Art & Museums",
@@ -160,6 +161,24 @@ class EventService:
         now = now or datetime.now(timezone.utc)
         return max(0, int((now - _parse_datetime(self.last_fetched_at)).total_seconds()))
 
+    def seconds_until_refresh(self, now: datetime | None = None,
+                              interval: int = EVENT_REFRESH_SECONDS) -> float:
+        """Return zero when any currently needed date partition is absent or due."""
+        now = now or datetime.now(timezone.utc)
+        local_date = now.astimezone(PACIFIC).date()
+        fetched = []
+        for day in _refresh_dates(local_date):
+            value = self.store.load_event_cache(day.isoformat()) or {}
+            if not isinstance(value.get("events"), list):
+                return 0
+            try:
+                fetched.append(_parse_datetime(value["fetched_at"]))
+            except (KeyError, TypeError, ValueError):
+                return 0
+        self.last_fetched_at = min(fetched).isoformat() if fetched else None
+        age = max(0.0, (now - min(fetched)).total_seconds())
+        return max(0.0, interval - age)
+
     def _load_date(self, day: date) -> list[Event]:
         cached = self.store.load_event_cache(day.isoformat())
         if not cached or not isinstance(cached.get("events"), list):
@@ -189,6 +208,10 @@ def weekend_dates(today: date) -> tuple[date, date]:
     saturday = (today - timedelta(days=1) if today.weekday() == 6 else
                 today + timedelta(days=(5 - today.weekday()) % 7))
     return saturday, saturday + timedelta(days=1)
+
+
+def _refresh_dates(today: date) -> tuple[date, ...]:
+    return (today, *(day for day in weekend_dates(today) if day > today))
 
 
 def parse_rss(source: str | bytes) -> list[Event]:

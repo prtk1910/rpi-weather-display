@@ -10,7 +10,7 @@ _Live 480×320 screenshot captured from the installed Raspberry Pi display._
 
 _Live Pi capture showing three current-day and three unique weekend events, ranked from the selected Funcheap categories._
 
-The default location is Rincon Hill, San Francisco (`37.78521, -122.39192`) with Celsius, km/h, and a 24-hour clock. The display rotates between weather for 20 seconds and events for 10 seconds. Weather refreshes every 10 minutes and events refresh hourly; both retain their last good cached data through network outages.
+The default location is Rincon Hill, San Francisco (`37.78521, -122.39192`) with Celsius, km/h, and a 24-hour clock. The display rotates between weather for 20 seconds and events for 10 seconds. Weather refreshes every 10 minutes and events refresh every six hours; both retain their last good cached data through network outages. A fresh event cache is reused immediately after service restarts, and the display remains on weather while an initially missing cache is populated.
 
 The events scene shows three `TODAY` listings and three unique `THIS WEEKEND` listings, each with its start time and venue. Today's data comes from Funcheap's structured RSS feed; upcoming Saturday and Sunday data comes from its machine-readable date pages. The integration excludes expired, duplicate, malformed, non-San Francisco, and Sponsored entries. It ranks exact selected-category matches first, then Top Picks and soonest start time, while unselected categories fill any remaining cards.
 
@@ -63,7 +63,7 @@ cd rpi-weather-display
 sudo WEATHER_DISPLAY_PIN='choose-a-private-pin' scripts/install.sh
 ```
 
-The installer validates Bookworm, X11, and the active screen mode; installs stable APT packages; creates `/opt/weather-display/.venv`; and installs a non-root systemd service. It sets the hostname to `weather-display`, enables mDNS, and disables X11 blanking/DPMS when the service starts.
+The installer validates Bookworm, X11, and the active screen mode; installs stable APT packages; creates `/opt/weather-display/.venv`; and installs a non-root systemd service. It sets the hostname to `weather-display`, enables mDNS, and keeps X11 blanking/DPMS disabled after the display connection is ready.
 
 The PIN is written with root-only permissions to `/etc/weather-display/environment`. Settings, the session secret, cached weather, and date-partitioned event caches live in `/var/lib/weather-display`. None are inside the Git checkout. `WEATHER_DISPLAY_PIN` is mandatory; the service exits immediately if it is absent.
 
@@ -72,7 +72,7 @@ From a phone or computer on the same LAN, open:
 - `http://weather-display.local:8080`
 - `http://<pi-ip-address>:8080` if mDNS is unavailable
 
-The settings app searches places, ZIP codes, and neighborhoods; allows exact coordinate/timezone edits; switches metric/imperial units and 12/24-hour time; configures each scene from 5–300 seconds; and prioritizes any OR-based selection of Funcheap's official categories. A save immediately restarts the cycle on weather.
+The settings app searches places, ZIP codes, and neighborhoods; allows exact coordinate/timezone edits; switches metric/imperial units and 12/24-hour time; configures each scene from 5–300 seconds; and prioritizes any OR-based selection of Funcheap's official categories. A save immediately restarts the cycle on weather, while the compact “Switch display now” button toggles the physical screen between weather and events on demand.
 
 ![Weather display settings web app on desktop](examples/web-settings.png)
 
@@ -125,7 +125,7 @@ WEATHER_DISPLAY_WINDOWED=1 python -m weather_display.main
 
 - **Black screen or SDL/X11 error:** confirm the Desktop session is running under X11, `DISPLAY=:0`, the user's `.Xauthority` exists, and `xrandr` sees 480×320.
 - **Service starts before the desktop:** inspect `journalctl`; after the autologin desktop is ready, restart the service. The unit orders itself after the display manager and retries failures.
-- **Screen blanks:** run `DISPLAY=:0 xset q`; the unit runs `xset s off` and `xset -dpms` at each start. Also disable any desktop screensaver.
+- **Screen blanks:** run `vcgencmd get_throttled`; flags such as `0x50000` indicate that undervoltage and throttling have occurred, so check the power supply and cable. The app reapplies `xset s off`, `xset s noblank`, and `xset -dpms` after connecting to X11 and every five minutes. Also disable any desktop screensaver.
 - **Settings site is unreachable:** confirm both devices are on the same LAN, port 8080 is allowed, and try the Pi's IP address. Check `systemctl status avahi-daemon` for `.local` naming.
 - **Weather is stale:** `/healthz` exposes cache age and the most recent sanitized fetch error. Cached data remains on screen while requests retry.
 - **Events are stale:** `/healthz` separately exposes event cache age and the latest partial or complete Funcheap refresh error. Each date keeps its last successful cache if another date fails.

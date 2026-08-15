@@ -21,6 +21,7 @@ def test_systemd_template_substitutes_all_placeholders():
     for key,value in {"@SERVICE_USER@":"pi","@USER_HOME@":"/home/pi","@INSTALL_DIR@":"/opt/weather-display"}.items(): text=text.replace(key,value)
     assert not re.search(r"@[A-Z_]+@",text)
     assert "User=pi" in text and "ExecStart=/opt/weather-display/.venv/bin/weather-display" in text
+    assert "ExecStartPre" not in text
 
 def test_real_pin_is_not_in_tracked_source():
     allowed={ROOT/"tests/test_repository.py"}

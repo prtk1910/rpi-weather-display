@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 import pygame
 
 from .state import Settings
-from .events import Event, EventSelection
+from .events import EVENT_REFRESH_SECONDS, Event, EventSelection
 from .util import age_label, compass_direction, condition_for, format_clock, local_datetime, rounded, uv_risk
 from .weather import WeatherSnapshot
 
@@ -90,7 +90,7 @@ class DashboardRenderer:
 
         fetched = _parse_time(fetched_at) if fetched_at else None
         age = (now - fetched).total_seconds() if fetched else None
-        stale = age is not None and age > 2 * 60 * 60
+        stale = age is not None and age > EVENT_REFRESH_SECONDS + 15 * 60
         if fetched:
             status = f"Updated {age_label(age or 0)}"
             if stale or error:

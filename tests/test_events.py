@@ -168,3 +168,23 @@ def test_partial_refresh_preserves_failed_date_partition(tmp_path):
     assert [event.title for event in selection.today] == ["Fresh Friday"]
     assert {event.title for event in selection.weekend} == {"Cached Saturday", "Sunday"}
     assert store.load_event_cache("2026-08-15")["events"][0]["title"] == "Cached Saturday"
+
+
+def test_fresh_complete_cache_defers_network_refresh_for_six_hours(tmp_path):
+    store = StateStore(tmp_path)
+    for day in (date(2026, 8, 14), date(2026, 8, 15), date(2026, 8, 16)):
+        save_day(store, day, [make_event(f"Event {day.day}", 20, day=day.day)], NOW)
+    service = EventService(store, object())
+    assert service.seconds_until_refresh(NOW) == 6 * 60 * 60
+    assert service.seconds_until_refresh(NOW + timedelta(hours=2)) == 4 * 60 * 60
+    assert service.seconds_until_refresh(NOW + timedelta(hours=6)) == 0
+
+
+def test_missing_or_malformed_required_partition_refreshes_immediately(tmp_path):
+    store = StateStore(tmp_path)
+    save_day(store, date(2026, 8, 14), [make_event("Friday", 20)], NOW)
+    save_day(store, date(2026, 8, 15), [make_event("Saturday", 20, day=15)], NOW)
+    service = EventService(store, object())
+    assert service.seconds_until_refresh(NOW) == 0
+    store.save_event_cache("2026-08-16", {"fetched_at": NOW.isoformat(), "events": "bad"})
+    assert service.seconds_until_refresh(NOW) == 0

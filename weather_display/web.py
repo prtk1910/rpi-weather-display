@@ -41,7 +41,8 @@ def create_app(store: StateStore, weather: WeatherService, provider: OpenMeteoPr
                pin: str, refresh_event: threading.Event | None = None,
                display_status=lambda: "starting",
                cycle_reset_event: threading.Event | None = None,
-               events: EventService | None = None) -> Flask:
+               events: EventService | None = None,
+               display_toggle_event: threading.Event | None = None) -> Flask:
     if not pin:
         raise RuntimeError("WEATHER_DISPLAY_PIN is required")
     app = Flask(__name__)
@@ -51,6 +52,7 @@ def create_app(store: StateStore, weather: WeatherService, provider: OpenMeteoPr
     throttle = LoginThrottle()
     refresh_event = refresh_event or threading.Event()
     cycle_reset_event = cycle_reset_event or threading.Event()
+    display_toggle_event = display_toggle_event or threading.Event()
 
     def authenticated(fn):
         @wraps(fn)
@@ -121,6 +123,13 @@ def create_app(store: StateStore, weather: WeatherService, provider: OpenMeteoPr
         if len(query) < 2: return jsonify([])
         try: return jsonify(provider.search_locations(query))
         except WeatherError as exc: return jsonify(error=str(exc)), 502
+
+    @app.post("/api/display/toggle")
+    @authenticated
+    def toggle_display():
+        if not same_origin(): abort(403)
+        display_toggle_event.set()
+        return jsonify(status="switch requested")
 
     @app.get("/healthz")
     def health():
