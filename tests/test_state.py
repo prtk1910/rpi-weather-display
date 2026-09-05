@@ -1,4 +1,5 @@
 import json
+import threading
 from dataclasses import replace
 
 import pytest
@@ -31,6 +32,32 @@ def test_atomic_write_leaves_valid_original_on_replace_failure(tmp_path, monkeyp
     monkeypatch.setattr(state.os, "replace", lambda *_: (_ for _ in ()).throw(OSError("disk")))
     with pytest.raises(OSError): store.save_settings(replace(Settings(), units="imperial"))
     assert json.loads(store.settings_path.read_text())["units"] == "metric"
+
+
+def test_slow_weather_write_does_not_block_event_cache_reads(tmp_path, monkeypatch):
+    store = StateStore(tmp_path)
+    store.save_event_cache("2026-08-14", {"events": []})
+    import weather_display.state as state
+    real_write = state.atomic_write_json
+    entered, release, read_finished = threading.Event(), threading.Event(), threading.Event()
+
+    def slow_weather_write(path, value, mode=0o600):
+        if path == store.cache_path:
+            entered.set()
+            release.wait(2)
+        return real_write(path, value, mode)
+
+    monkeypatch.setattr(state, "atomic_write_json", slow_weather_write)
+    writer = threading.Thread(target=lambda: store.save_cache({"temperature": 20}))
+    reader = threading.Thread(target=lambda: (store.load_event_cache("2026-08-14"),
+                                               read_finished.set()))
+    writer.start()
+    assert entered.wait(1)
+    reader.start()
+    assert read_finished.wait(0.5)
+    release.set()
+    writer.join(1)
+    reader.join(1)
 
 def test_cache_tolerates_corruption(tmp_path):
     store = StateStore(tmp_path); store.cache_path.write_text("nope")

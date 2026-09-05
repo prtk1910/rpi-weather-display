@@ -53,9 +53,22 @@ def test_failed_login_throttling(tmp_path):
 
 def test_health_is_public_and_contains_status(tmp_path):
     client,_,_=make_client(tmp_path)
-    body=client.get("/healthz").json
+    response=client.get("/healthz"); body=response.json
+    assert response.status_code==503 and body["service"]=="degraded"
     assert body["display"]=="rendering"
-    assert "event_cache_age_seconds" in body and "event_error" in body
+    assert "event_cache_age_seconds" in body and "event_error" in body and body["workers"]=={}
+
+def test_health_reports_healthy_cache_and_stale_workers(tmp_path):
+    store=StateStore(tmp_path); provider=OpenMeteoProvider(Session())
+    weather=WeatherService(store,provider); assert weather.refresh(store.load_settings())
+    app=create_app(store,weather,provider,"test-pin",worker_status=lambda: {})
+    app.config.update(TESTING=True); client=app.test_client()
+    assert client.get("/healthz").status_code==200
+    app=create_app(store,weather,provider,"test-pin",
+                   worker_status=lambda: {"events":{"state":"waiting","stale":True}})
+    app.config.update(TESTING=True); client=app.test_client()
+    response=client.get("/healthz")
+    assert response.status_code==503 and response.json["workers"]["events"]["stale"] is True
 
 def test_duration_and_category_api_ui_round_trip_and_cycle_reset(tmp_path):
     store=StateStore(tmp_path); provider=OpenMeteoProvider(Session(Response({"results":[]})))

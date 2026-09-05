@@ -114,46 +114,50 @@ class StateStore:
         self.cache_path = self.directory / "weather-cache.json"
         self.event_cache_dir = self.directory / "event-cache"
         self.secret_path = self.directory / "session-secret"
-        self._lock = threading.RLock()
+        # Reads are lock-free because writers publish complete files with os.replace().
+        # Keep unrelated writes independent so a slow SD-card fsync for one cache
+        # cannot stop settings, weather, and events together.
+        self._settings_write_lock = threading.Lock()
+        self._weather_write_lock = threading.Lock()
+        self._event_write_lock = threading.Lock()
+        self._secret_lock = threading.Lock()
 
     def load_settings(self) -> Settings:
-        with self._lock:
-            if not self.settings_path.exists():
-                return Settings()
+        try:
             return Settings.from_dict(json.loads(self.settings_path.read_text(encoding="utf-8")))
+        except FileNotFoundError:
+            return Settings()
 
     def save_settings(self, settings: Settings) -> None:
         settings.validate()
-        with self._lock:
+        with self._settings_write_lock:
             atomic_write_json(self.settings_path, asdict(settings))
 
     def load_cache(self) -> dict | None:
-        with self._lock:
-            try:
-                value = json.loads(self.cache_path.read_text(encoding="utf-8"))
-                return value if isinstance(value, dict) else None
-            except (FileNotFoundError, json.JSONDecodeError, OSError):
-                return None
+        try:
+            value = json.loads(self.cache_path.read_text(encoding="utf-8"))
+            return value if isinstance(value, dict) else None
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return None
 
     def save_cache(self, value: dict) -> None:
-        with self._lock:
+        with self._weather_write_lock:
             atomic_write_json(self.cache_path, value)
 
     def load_event_cache(self, date_key: str) -> dict | None:
         path = self.event_cache_dir / f"{date_key}.json"
-        with self._lock:
-            try:
-                value = json.loads(path.read_text(encoding="utf-8"))
-                return value if isinstance(value, dict) else None
-            except (FileNotFoundError, json.JSONDecodeError, OSError):
-                return None
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+            return value if isinstance(value, dict) else None
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return None
 
     def save_event_cache(self, date_key: str, value: dict) -> None:
-        with self._lock:
+        with self._event_write_lock:
             atomic_write_json(self.event_cache_dir / f"{date_key}.json", value)
 
     def session_secret(self) -> str:
-        with self._lock:
+        with self._secret_lock:
             try:
                 return self.secret_path.read_text(encoding="ascii").strip()
             except FileNotFoundError:

@@ -13,8 +13,12 @@ from urllib.parse import urlsplit
 from flask import Flask, abort, jsonify, redirect, render_template, request, session, url_for
 
 from .state import EVENT_CATEGORIES, Settings, StateStore
-from .events import EventService
+from .events import EVENT_REFRESH_SECONDS, EventService
 from .weather import OpenMeteoProvider, WeatherError, WeatherService
+
+
+WEATHER_STALE_SECONDS = 15 * 60
+EVENT_STALE_SECONDS = EVENT_REFRESH_SECONDS + 15 * 60
 
 
 class LoginThrottle:
@@ -42,7 +46,8 @@ def create_app(store: StateStore, weather: WeatherService, provider: OpenMeteoPr
                display_status=lambda: "starting",
                cycle_reset_event: threading.Event | None = None,
                events: EventService | None = None,
-               display_toggle_event: threading.Event | None = None) -> Flask:
+               display_toggle_event: threading.Event | None = None,
+               worker_status=lambda: {}) -> Flask:
     if not pin:
         raise RuntimeError("WEATHER_DISPLAY_PIN is required")
     app = Flask(__name__)
@@ -138,10 +143,20 @@ def create_app(store: StateStore, weather: WeatherService, provider: OpenMeteoPr
         if snapshot:
             fetched = datetime.fromisoformat(snapshot.fetched_at.replace("Z", "+00:00"))
             age = max(0, int((datetime.now(timezone.utc) - fetched).total_seconds()))
-        return jsonify(service="ok", weather_cache_age_seconds=age,
-                       weather_error=weather.last_error,
-                       event_cache_age_seconds=events.cache_age_seconds() if events else None,
-                       event_error=events.last_error if events else None,
-                       display=display_status())
+        event_age = events.cache_age_seconds() if events else None
+        workers = worker_status()
+        unhealthy = (
+            age is None or age > WEATHER_STALE_SECONDS or weather.last_error is not None
+            or (events is not None and (
+                event_age is None or event_age > EVENT_STALE_SECONDS or events.last_error is not None))
+            or any(value.get("stale", False) for value in workers.values())
+        )
+        response = jsonify(service="degraded" if unhealthy else "ok",
+                           weather_cache_age_seconds=age,
+                           weather_error=weather.last_error,
+                           event_cache_age_seconds=event_age,
+                           event_error=events.last_error if events else None,
+                           workers=workers, display=display_status())
+        return response, 503 if unhealthy else 200
 
     return app

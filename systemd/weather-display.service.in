@@ -4,7 +4,7 @@ Wants=network-online.target graphical-session.target
 After=network-online.target display-manager.service
 
 [Service]
-Type=simple
+Type=notify
 User=@SERVICE_USER@
 Group=@SERVICE_USER@
 WorkingDirectory=@INSTALL_DIR@
@@ -20,6 +20,8 @@ Environment=WEATHER_DISPLAY_DATA_DIR=/var/lib/weather-display
 ExecStart=@INSTALL_DIR@/.venv/bin/weather-display
 Restart=on-failure
 RestartSec=5
+TimeoutStartSec=120
+WatchdogSec=180
 NoNewPrivileges=true
 PrivateTmp=true
 RuntimeDirectory=weather-display

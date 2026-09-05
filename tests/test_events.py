@@ -1,10 +1,12 @@
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from weather_display.events import (Event, EventError, EventService, FuncheapProvider,
-                                    parse_date_page, parse_rss, weekend_dates)
+                                    event_wait_seconds, parse_date_page, parse_rss,
+                                    seconds_until_next_day, weekend_dates)
 from weather_display.state import Settings, StateStore
 
 
@@ -188,3 +190,17 @@ def test_missing_or_malformed_required_partition_refreshes_immediately(tmp_path)
     assert service.seconds_until_refresh(NOW) == 0
     store.save_event_cache("2026-08-16", {"fetched_at": NOW.isoformat(), "events": "bad"})
     assert service.seconds_until_refresh(NOW) == 0
+
+
+def test_event_worker_wakes_at_next_pacific_day_even_with_fresh_cache():
+    before_midnight = datetime(2026, 8, 14, 23, 59, tzinfo=PACIFIC)
+    assert seconds_until_next_day(before_midnight) == 60
+    assert event_wait_seconds(6 * 60 * 60, before_midnight) == 60
+
+
+def test_next_day_wait_handles_daylight_saving_boundaries():
+    pacific = ZoneInfo("America/Los_Angeles")
+    before_spring_forward = datetime(2026, 3, 7, 23, 0, tzinfo=pacific)
+    after_spring_forward = datetime(2026, 3, 8, 0, 0, tzinfo=pacific)
+    assert seconds_until_next_day(before_spring_forward) == 60 * 60
+    assert seconds_until_next_day(after_spring_forward) == 23 * 60 * 60

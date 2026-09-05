@@ -12,7 +12,7 @@ _Live Pi capture showing three current-day and three unique weekend events, rank
 
 The default location is Rincon Hill, San Francisco (`37.78521, -122.39192`) with Celsius, km/h, and a 24-hour clock. The display rotates between weather for 20 seconds and events for 10 seconds. Weather refreshes every 10 minutes and events refresh every six hours; both retain their last good cached data through network outages. A fresh event cache is reused immediately after service restarts, and the display remains on weather while an initially missing cache is populated.
 
-The events scene shows three `TODAY` listings and three unique `THIS WEEKEND` listings, each with its start time and venue. Today's data comes from Funcheap's structured RSS feed; upcoming Saturday and Sunday data comes from its machine-readable date pages. The integration excludes expired, duplicate, malformed, non-San Francisco, and Sponsored entries. It ranks exact selected-category matches first, then Top Picks and soonest start time, while unselected categories fill any remaining cards.
+The events scene shows three `TODAY` listings and three unique `THIS WEEKEND` listings, each with its start time and venue. Today's data comes from Funcheap's structured RSS feed; upcoming Saturday and Sunday data comes from its machine-readable date pages. The integration excludes expired, duplicate, malformed, non-San Francisco, and Sponsored entries. It ranks exact selected-category matches first, then Top Picks and soonest start time, while unselected categories fill any remaining cards. The event worker wakes at Pacific midnight even when its six-hour cache is still fresh, so the scene rolls to the new day promptly.
 
 ## Supported hardware and OS
 
@@ -100,7 +100,9 @@ The health endpoint is intentionally unauthenticated for LAN monitoring:
 curl http://weather-display.local:8080/healthz
 ```
 
-It reports service state, display state, weather/event errors, and both cache ages. It never includes the PIN or session secret.
+It reports service state, display state, weather/event errors, both cache ages, and background-worker heartbeat state. A missing or stale cache, fetch error, or stalled worker returns `503` with `"service":"degraded"`; healthy service returns `200`. It never includes the PIN or session secret.
+
+Weather and event caches use independent atomic-write locks, so slow storage in one data source cannot block the other. The process also sends systemd watchdog notifications and exits for automatic restart if either fetch worker stops making progress for two minutes.
 
 ## Development and deterministic previews
 

@@ -4,7 +4,7 @@ import html
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time as datetime_time, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from urllib.parse import urlsplit, urlunsplit
@@ -212,6 +212,19 @@ def weekend_dates(today: date) -> tuple[date, date]:
 
 def _refresh_dates(today: date) -> tuple[date, ...]:
     return (today, *(day for day in weekend_dates(today) if day > today))
+
+
+def seconds_until_next_day(now: datetime | None = None) -> float:
+    """Return the real elapsed time until the next Pacific calendar day."""
+    now = now or datetime.now(timezone.utc)
+    local = now.astimezone(PACIFIC)
+    midnight = datetime.combine(local.date() + timedelta(days=1), datetime_time(), PACIFIC)
+    return max(0.0, (midnight.astimezone(timezone.utc) - now.astimezone(timezone.utc)).total_seconds())
+
+
+def event_wait_seconds(refresh_delay: float, now: datetime | None = None) -> float:
+    """Bound the normal refresh delay by the next Pacific date rollover."""
+    return min(max(1.0, refresh_delay), max(1.0, seconds_until_next_day(now)))
 
 
 def parse_rss(source: str | bytes) -> list[Event]:

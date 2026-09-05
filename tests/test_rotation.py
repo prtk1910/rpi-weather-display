@@ -1,6 +1,9 @@
 from types import SimpleNamespace
 
-from weather_display.main import SceneRotation, disable_screen_blanking, toggle_scene
+import pygame
+
+from weather_display.main import (FrameConfirmation, SceneRotation, disable_screen_blanking,
+                                  display_event_needs_repaint, toggle_scene)
 
 
 def test_rotation_uses_independent_durations_and_boundaries():
@@ -49,3 +52,18 @@ def test_screen_blanking_is_disabled_after_x11_is_ready():
         ["xset", "-display", ":7", "s", "noblank"],
         ["xset", "-display", ":7", "-dpms"],
     ]
+
+
+def test_display_repaints_after_x11_loses_or_reexposes_window_contents():
+    assert display_event_needs_repaint(pygame.WINDOWEXPOSED) is True
+    assert display_event_needs_repaint(pygame.WINDOWSHOWN) is True
+    assert display_event_needs_repaint(pygame.WINDOWFOCUSGAINED) is True
+    assert display_event_needs_repaint(pygame.KEYDOWN) is False
+
+
+def test_scene_confirmation_repaints_once_after_spi_transfer_delay():
+    confirmation = FrameConfirmation(delay=0.5)
+    confirmation.schedule(10.0)
+    assert confirmation.take_if_due(10.499) is False
+    assert confirmation.take_if_due(10.5) is True
+    assert confirmation.take_if_due(11.0) is False
