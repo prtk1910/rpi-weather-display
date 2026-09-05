@@ -65,5 +65,6 @@ else
   printf '127.0.1.1\tweather-display\n' >> /etc/hosts
 fi
 systemctl enable --now avahi-daemon.service
-systemctl enable --now weather-display.service
+systemctl enable weather-display.service
+systemctl restart weather-display.service
 echo "Installed. Open http://weather-display.local:8080 or use the Pi's IP address."

@@ -8,7 +8,9 @@ ROOT=Path(__file__).parents[1]
 def test_installer_shell_syntax(): subprocess.run(["bash","-n",ROOT/"scripts/install.sh"],check=True)
 
 def test_installer_reinstalls_same_version_updates():
-    assert "--force-reinstall" in (ROOT/"scripts/install.sh").read_text()
+    text=(ROOT/"scripts/install.sh").read_text()
+    assert "--force-reinstall" in text
+    assert "systemctl restart weather-display.service" in text
 
 def test_xrandr_primary_mode_parser():
     line="Unknown19-1 connected primary 480x320+0+0 (normal left inverted right x axis y axis)"
@@ -21,7 +23,7 @@ def test_systemd_template_substitutes_all_placeholders():
     for key,value in {"@SERVICE_USER@":"pi","@USER_HOME@":"/home/pi","@INSTALL_DIR@":"/opt/weather-display"}.items(): text=text.replace(key,value)
     assert not re.search(r"@[A-Z_]+@",text)
     assert "User=pi" in text and "ExecStart=/opt/weather-display/.venv/bin/weather-display" in text
-    assert "Type=notify" in text and "WatchdogSec=" in text
+    assert "Type=notify" in text and "NotifyAccess=all" in text and "WatchdogSec=" in text
     assert "ExecStartPre" not in text
 
 def test_real_pin_is_not_in_tracked_source():

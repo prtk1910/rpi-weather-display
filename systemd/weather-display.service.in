@@ -5,6 +5,7 @@ After=network-online.target display-manager.service
 
 [Service]
 Type=notify
+NotifyAccess=all
 User=@SERVICE_USER@
 Group=@SERVICE_USER@
 WorkingDirectory=@INSTALL_DIR@
