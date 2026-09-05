@@ -25,6 +25,7 @@ LOG = logging.getLogger("weather-display")
 DISPLAY_CONFIRM_SECONDS = 0.5
 WEATHER_REFRESH_SECONDS = 10 * 60
 EVENT_RETRY_SECONDS = 5 * 60
+SYSTEMD_WATCHDOG_INTERVAL_SECONDS = 30
 DISPLAY_REPAINT_EVENTS = frozenset(
     event_type for name in (
         "WINDOWEXPOSED", "WINDOWSHOWN", "WINDOWRESTORED", "WINDOWFOCUSGAINED",
@@ -212,6 +213,7 @@ def main() -> None:
     signal.signal(signal.SIGINT, stop)
     display_state["value"] = "rendering"
     notify_systemd("READY=1\nSTATUS=Rendering weather dashboard")
+    watchdog_notified_at = time.monotonic()
     try:
         while running:
             loop_at = time.perf_counter()
@@ -238,6 +240,9 @@ def main() -> None:
             now = datetime.now(timezone.utc)
             settings = store.load_settings()
             monotonic_now = time.monotonic()
+            if monotonic_now - watchdog_notified_at >= SYSTEMD_WATCHDOG_INTERVAL_SECONDS:
+                notify_systemd("WATCHDOG=1")
+                watchdog_notified_at = monotonic_now
             if cycle_reset_event.is_set():
                 cycle_reset_event.clear()
                 rotation.reset(monotonic_now)
@@ -293,7 +298,6 @@ def main() -> None:
     finally:
         display_state["value"] = "stopped"
         stop_event.set(); refresh_event.set()
-        notify_systemd("STOPPING=1\nSTATUS=Stopping weather dashboard")
         pygame.quit()
 
 

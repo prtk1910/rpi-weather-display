@@ -83,15 +83,12 @@ def notify_systemd(message: str) -> bool:
 def supervise_workers(heartbeats: Iterable[WorkerHeartbeat], stop_event: threading.Event,
                       terminate: Callable[[int], object] = os._exit,
                       interval: float = 10.0) -> None:
-    """Keep systemd informed and terminate if any worker stops making progress."""
+    """Terminate if any worker stops making progress."""
     heartbeats = tuple(heartbeats)
     while not stop_event.wait(interval):
         health = worker_health(heartbeats)
         stalled = [name for name, value in health.items() if value["stale"]]
         if stalled:
             LOG.critical("Worker watchdog detected no progress from: %s", ", ".join(stalled))
-            notify_systemd("STATUS=Stalled workers: " + ", ".join(stalled))
             terminate(1)
             return
-        notify_systemd("WATCHDOG=1")
-
