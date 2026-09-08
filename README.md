@@ -16,9 +16,9 @@ The events scene shows three `TODAY` listings and three unique `THIS WEEKEND` li
 
 ## Supported hardware and OS
 
-- Raspberry Pi 3B
+- Any Raspberry Pi (Zero, 3B, etc).
 - 480×320 landscape SPI display
-- Raspberry Pi OS Bookworm 64-bit Desktop using X11
+- Raspberry Pi OS Bookworm 32-bit Desktop using X11
 - The `piscreen` DRM overlay configuration shown below
 
 Wayland, Raspberry Pi OS Lite, other resolutions, and framebuffer-only setups are not supported by the installer. The app may work on them with manual adaptation.
